@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Install bookmarklet · Job Search Kit{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>JD Capture bookmarklet</h2>
+  <p class="muted">
+    A one-click bookmark that grabs the visible JD text from whatever job page
+    you're looking at — including <strong>LinkedIn</strong>, <strong>Workday</strong>,
+    <strong>Ashby</strong>, <strong>Indeed</strong>, and any internal career site —
+    and POSTs it to this local app for screening. Because it runs inside your own
+    browser, you're already logged in to LinkedIn etc., so auth is never a problem.
+  </p>
+
+  <h3>1. Install</h3>
+  <p>Make sure your browser's bookmarks bar is visible (<code>⌘⇧B</code> in Chrome).
+    Drag the button below to the bar:</p>
+
+  <p style="margin: 20px 0;">
+    <a href="{{ bookmarklet_href }}"
+       class="btn primary"
+       onclick="event.preventDefault(); alert('Drag me to your bookmarks bar — don\'t click.');"
+       style="font-size: 16px; padding: 10px 18px;">
+      📋 Capture JD → Job Search Kit
+    </a>
+  </p>
+
+  <h3>2. Use it</h3>
+  <ol>
+    <li>Open any job posting in your browser (LinkedIn, Workday, company site, anything).</li>
+    <li>Click the <strong>Capture JD</strong> bookmark.</li>
+    <li>A new tab opens with the New Application form pre-filled with the JD text.
+      Review, edit the company / role if needed, then click <strong>Screen this JD</strong>.</li>
+  </ol>
+
+  <h3>Troubleshooting</h3>
+  <ul>
+    <li><strong>Nothing happens after click:</strong> the bookmarklet's target is
+      <code>{{ base_url }}</code>. If your app runs on a different port, regenerate
+      the bookmarklet from this page after restarting on the new port.</li>
+    <li><strong>"Blocked by CSP":</strong> some sites (notably some Workday and
+      single-tenant ATS deployments) have strict Content-Security-Policy headers
+      that prevent the bookmarklet from injecting a form. Fall back to selecting
+      the JD text manually, copy, and paste into the New Application textarea.</li>
+    <li><strong>Captured too much / too little text:</strong> the bookmarklet
+      tries common JD container selectors first and falls back to the whole
+      body. You can always trim or replace the textarea content before screening.</li>
+  </ul>
+
+  <h3>What it captures</h3>
+  <p class="muted small">
+    Page URL, <code>document.title</code>, and the inner text of the first
+    matching JD container (LinkedIn's <code>.jobs-description__content</code>,
+    Workday's <code>[data-automation-id=jobPostingDescription]</code>, etc.) —
+    falling back to the full body. Everything stays on your machine: it POSTs
+    only to <code>{{ base_url }}/import</code>.
+  </p>
+
+  <details>
+    <summary>View the raw bookmarklet source</summary>
+    <pre>{{ bookmarklet_source }}</pre>
+  </details>
+</section>
+
+{% endblock %}

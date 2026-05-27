@@ -1,0 +1,23 @@
+{% if result.ok %}
+  <div class="ok-box">
+    <strong>Fetched:</strong> {{ result.title or '(no title)' }}
+    <span class="muted small">({{ result.text | length }} chars)</span>
+    <form method="get" action="/applications/new" style="margin-top:.5rem">
+      <input type="hidden" name="url" value="{{ url }}" />
+      <input type="hidden" name="jd" value="{{ result.text }}" />
+      <button class="btn small primary" type="submit">Use this text below</button>
+    </form>
+    <details>
+      <summary>Preview ({{ result.text | length }} chars)</summary>
+      <pre class="jd">{{ result.text[:4000] }}{% if result.text | length > 4000 %}
+
+… [truncated preview, full text will be used]{% endif %}</pre>
+    </details>
+  </div>
+{% else %}
+  <div class="error-box">
+    <strong>Fetch failed.</strong> {{ result.error }}
+    {% if result.text %}<details><summary>Partial text</summary><pre class="jd">{{ result.text }}</pre></details>{% endif %}
+    <p class="muted small">Workaround: copy/paste the JD into the textarea below.</p>
+  </div>
+{% endif %}

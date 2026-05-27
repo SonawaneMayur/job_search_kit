@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Job Search Kit{% endblock %}
+{% block content %}
+
+<section class="row">
+  <div class="card stat">
+    <div class="stat-num">{{ stats.total }}</div>
+    <div class="stat-label">total applications</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-num">{{ stats.by_verdict.get('APPLY', 0) + stats.by_verdict.get('APPLY_WITH_OUTREACH', 0) }}</div>
+    <div class="stat-label">apply verdicts</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-num">{{ stats.by_verdict.get('SKIP', 0) }}</div>
+    <div class="stat-label">skipped</div>
+  </div>
+  <div class="card stat">
+    <div class="stat-num">{{ stats.by_status.get('Submitted', 0) }}</div>
+    <div class="stat-label">submitted</div>
+  </div>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Applications</h2>
+    <form method="get" action="/" class="inline">
+      <label>Status</label>
+      <select name="status" onchange="this.form.submit()">
+        {% for s in ['All','New','Screened','Skipped','Assets generated — pending user submission','Submitted','Interviewing','Offer','Rejected','Withdrawn'] %}
+          <option value="{{ s }}" {% if status_filter == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+      <a class="btn primary" href="/applications/new">+ New</a>
+    </form>
+  </div>
+
+  {% if applications %}
+  <table class="apps">
+    <thead>
+      <tr>
+        <th>Company</th>
+        <th>Role</th>
+        <th>Verdict</th>
+        <th>Sponsorship</th>
+        <th>Fit</th>
+        <th>Status</th>
+        <th>Follow-up</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in applications %}
+      <tr>
+        <td>{{ a.company or '—' }}</td>
+        <td>{{ a.role or '—' }}</td>
+        <td><span class="badge v-{{ (a.verdict or '').lower() }}">{{ a.verdict or '—' }}</span></td>
+        <td><span class="badge s-{{ (a.sponsorship_posture or '').lower() }}">{{ a.sponsorship_posture or '—' }}</span></td>
+        <td>{{ a.seniority_match or '—' }}</td>
+        <td>{{ a.status or '—' }}</td>
+        <td>{{ a.follow_up_date or '—' }}</td>
+        <td><a href="/applications/{{ a.id }}">open →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No applications yet. <a href="/applications/new">Add one</a>, or browse <a href="/search">Search</a>.</p>
+  {% endif %}
+</section>
+
+{% endblock %}

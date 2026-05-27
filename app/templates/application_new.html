@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}New application · Job Search Kit{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>New application</h2>
+  <p class="muted small">
+    Phase 1 will run when you submit: sponsorship posture, role fit, top gaps, verdict.
+    Assets are generated separately on the detail page so you can review the verdict first.
+  </p>
+
+  {% if imported %}
+    <p class="ok">JD imported from bookmarklet — review and click <strong>Screen this JD</strong> below.</p>
+  {% endif %}
+
+  <h3>1. Get the JD text (pick one)</h3>
+  <p class="muted small">
+    A) Paste the URL and click <strong>Fetch</strong> — works for Greenhouse, Lever, and most plain career sites.
+    B) Click <strong>Render with browser</strong> — uses headless Chromium for JS-heavy sites like Workday or Ashby.
+    C) For LinkedIn or auth-walled sites, use the
+    <a href="/bookmarklet">bookmarklet</a> from your own logged-in browser.
+    D) Or just paste the JD text into the textarea below.
+  </p>
+  <form hx-post="/fetch-url" hx-target="#fetch-result" hx-indicator="#fetch-indicator" class="inline-form">
+    <input name="url" type="url" placeholder="https://… job posting URL" value="{{ prefill_url or '' }}" style="flex:1" />
+    <button type="submit" class="btn">Fetch</button>
+    <button type="submit" class="btn"
+            hx-post="/fetch-render-url" hx-target="#fetch-result" hx-indicator="#fetch-indicator">
+      Render with browser
+    </button>
+    <span id="fetch-indicator" class="htmx-indicator muted small">…working</span>
+  </form>
+  <div id="fetch-result"></div>
+
+  <h3>2. Submit JD for screening</h3>
+  <form method="post" action="/applications" class="grid">
+    <label>Company
+      <input name="company" placeholder="auto-detected if blank" value="{{ prefill_company or '' }}" />
+    </label>
+    <label>Role
+      <input name="role" placeholder="auto-detected if blank" value="{{ prefill_role or '' }}" />
+    </label>
+    <label class="wide">JD URL
+      <input name="jd_url" type="url" value="{{ prefill_url or '' }}" />
+    </label>
+    <label class="wide">JD text *
+      <textarea name="jd_text" rows="20" required>{{ prefill_jd or '' }}</textarea>
+    </label>
+    <div class="wide">
+      <button type="submit" class="btn primary">Screen this JD</button>
+      <span class="muted small">— calls your local Ollama. May take 30–120s depending on model.</span>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

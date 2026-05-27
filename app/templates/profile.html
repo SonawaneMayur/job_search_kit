@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Profile · Job Search Kit{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Profile & session variables</h2>
+  <p class="muted small">
+    Stored locally in <code>data/kit.db</code>. The master resume is used as the source of truth
+    for every tailored asset. KAGE always appears in both your Deloitte role and the projects section.
+  </p>
+
+  {% if request.query_params.get('saved') %}
+    <p class="ok">Saved.</p>
+  {% endif %}
+
+  <form method="post" action="/profile" class="grid">
+    <label>Full name
+      <input name="user_name" value="{{ profile.user_name or '' }}" />
+    </label>
+    <label>Current visa
+      <input name="current_visa" value="{{ profile.current_visa or 'H1B with [current employer]' }}" />
+    </label>
+    <label>GC stage
+      <select name="gc_stage">
+        {% for s in ['', 'PERM_FILED', 'I140_FILED', 'I140_APPROVED', 'I485_FILED', 'I485_PAST_180'] %}
+          <option value="{{ s }}" {% if profile.gc_stage == s %}selected{% endif %}>{{ s or '(unset)' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Priority date
+      <input name="priority_date" type="date" value="{{ profile.priority_date or '' }}" />
+    </label>
+    <label>AC21 eligible
+      <select name="ac21_eligible">
+        {% for s in ['', 'Yes', 'No', 'Pending'] %}
+          <option value="{{ s }}" {% if profile.ac21_eligible == s %}selected{% endif %}>{{ s or '(unset)' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>EAD
+      <select name="ead">
+        {% for s in ['', 'Yes', 'No'] %}
+          <option value="{{ s }}" {% if profile.ead == s %}selected{% endif %}>{{ s or '(unset)' }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="wide">Target roles (comma separated)
+      <input name="target_roles" value="{{ profile.target_roles or '' }}" placeholder="Staff Data Engineer, Principal AI Engineer, Solutions Architect…" />
+    </label>
+
+    <label class="wide">Master resume (markdown — used as source of truth)
+      <textarea name="master_resume" rows="18" placeholder="Paste your full master resume in markdown here.">{{ profile.master_resume or '' }}</textarea>
+    </label>
+
+    <fieldset class="wide">
+      <legend>Local LLM (Ollama)</legend>
+      <label>Ollama URL
+        <input name="ollama_url" value="{{ profile.ollama_url or 'http://localhost:11434' }}" />
+      </label>
+      <label>Model
+        <input name="ollama_model" value="{{ profile.ollama_model or 'llama3.1:8b' }}" list="model-list" />
+        <datalist id="model-list">
+          {% for m in ollama_models %}<option value="{{ m }}"></option>{% endfor %}
+        </datalist>
+      </label>
+      {% if ollama_models %}
+        <p class="muted small">Detected locally: {{ ollama_models | join(', ') }}</p>
+      {% else %}
+        <p class="muted small">No models detected. Make sure Ollama is running and you've pulled a JSON-capable model (e.g. <code>ollama pull llama3.1:8b</code>).</p>
+      {% endif %}
+    </fieldset>
+
+    <fieldset class="wide">
+      <legend>Adzuna (optional — for Search page)</legend>
+      <p class="muted small">Free dev key at developer.adzuna.com. Leave blank to disable search.</p>
+      <label>App ID
+        <input name="adzuna_app_id" value="{{ profile.adzuna_app_id or '' }}" />
+      </label>
+      <label>App key
+        <input name="adzuna_app_key" type="password" value="{{ profile.adzuna_app_key or '' }}" />
+      </label>
+    </fieldset>
+
+    <div class="wide">
+      <button type="submit" class="btn primary">Save profile</button>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

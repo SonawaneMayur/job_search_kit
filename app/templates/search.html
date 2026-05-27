@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Search · Job Search Kit{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>Search jobs</h2>
+  <p class="muted small">
+    Uses the Adzuna public jobs API. Add your free Adzuna app_id and app_key in
+    <a href="/profile">Profile</a> first. LinkedIn / Indeed direct scraping is not
+    supported (blocked by ToS / anti-bot) — use the URL fetcher on the New application
+    page to import a single posting.
+  </p>
+
+  {% if not profile.adzuna_app_id or not profile.adzuna_app_key %}
+    <p class="muted">Adzuna credentials missing. <a href="/profile">Set them in Profile</a>.</p>
+  {% else %}
+    <form method="post" action="/search" class="search-form">
+      <input class="search-input" name="what" placeholder="e.g. Staff Data Engineer, Principal AI Engineer, Databricks Solutions Architect"
+             value="{{ query or '' }}" required />
+      <select class="search-select" name="where">
+        {% for code, label in [('us','US'),('gb','UK'),('ca','Canada'),('in','India'),('au','Australia'),('de','Germany')] %}
+          <option value="{{ code }}" {% if where == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn primary search-btn" type="submit">Search</button>
+    </form>
+  {% endif %}
+
+  {% if results %}
+    {% if not results.ok %}
+      <p class="error">{{ results.error }}</p>
+    {% else %}
+      <p class="muted small">{{ results.results | length }} of {{ results.count }} results</p>
+      <ul class="results">
+        {% for r in results.results %}
+          <li>
+            <div class="row between">
+              <div>
+                <strong>{{ r.title }}</strong>
+                <span class="muted">— {{ r.company }} · {{ r.location }}</span>
+              </div>
+              <div>
+                <a class="btn small" href="{{ r.url }}" target="_blank" rel="noopener">View ↗</a>
+                <a class="btn small primary" href="/applications/new?url={{ r.url | urlencode }}">Import →</a>
+              </div>
+            </div>
+            <p class="muted small">{{ r.description }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endif %}
+</section>
+
+{% endblock %}

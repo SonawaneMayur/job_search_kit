@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ app.company or 'Application' }} — {{ app.role or '' }}{% endblock %}
+{% block content %}
+
+<section class="card">
+  <div class="card-head">
+    <div>
+      <h2>{{ app.company or 'Untitled' }} — {{ app.role or '' }}</h2>
+      <p class="muted small">
+        Created {{ app.created_at }} · follow-up {{ app.follow_up_date }}
+        {% if app.jd_url %} · <a href="{{ app.jd_url }}" target="_blank" rel="noopener">JD ↗</a>{% endif %}
+      </p>
+    </div>
+    <div>
+      <span class="badge v-{{ (app.verdict or '').lower() }}">{{ app.verdict or '—' }}</span>
+      <span class="badge s-{{ (app.sponsorship_posture or '').lower() }}">{{ app.sponsorship_posture or '—' }}</span>
+      <span class="badge">{{ app.seniority_match or '—' }}</span>
+    </div>
+  </div>
+
+  <details>
+    <summary>JD text</summary>
+    <pre class="jd">{{ app.jd_text }}</pre>
+  </details>
+</section>
+
+{# Phase 1 #}
+<section class="card">
+  <h3>Phase 1 — Screening</h3>
+  {% if screening %}
+    <div class="grid two">
+      <div>
+        <h4>Sponsorship</h4>
+        <p><strong>Posture:</strong> {{ screening.sponsorship.posture }}</p>
+        {% if screening.sponsorship.quote %}
+          <blockquote>"{{ screening.sponsorship.quote }}"</blockquote>
+        {% endif %}
+        <p class="muted small">{{ screening.sponsorship.reasoning }}</p>
+      </div>
+      <div>
+        <h4>Fit</h4>
+        <p><strong>Seniority:</strong> {{ screening.fit.seniority }} — <span class="muted">{{ screening.fit.seniority_reasoning }}</span></p>
+        {% if screening.fit.keywords_present %}
+          <p><strong>Keywords present:</strong> <span class="kw ok">{{ screening.fit.keywords_present | join(', ') }}</span></p>
+        {% endif %}
+        {% if screening.fit.keywords_absent %}
+          <p><strong>Keywords absent:</strong> <span class="kw gap">{{ screening.fit.keywords_absent | join(', ') }}</span></p>
+        {% endif %}
+        {% if screening.fit.top_gaps %}
+          <p><strong>Top gaps:</strong></p>
+          <ul>
+            {% for g in screening.fit.top_gaps %}
+              <li>{{ g.gap }} — <em>{{ g.handling }}</em></li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+        {% if screening.fit.red_flags %}
+          <p><strong>Red flags:</strong></p>
+          <ul>{% for f in screening.fit.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
+        {% endif %}
+      </div>
+    </div>
+    <p class="verdict-line"><strong>Verdict:</strong> {{ screening.verdict.decision }} — {{ screening.verdict.reasoning }}</p>
+  {% else %}
+    <p class="muted">No screening data on file.</p>
+  {% endif %}
+</section>
+
+{# Phase 2 #}
+<section class="card">
+  <div class="card-head">
+    <h3>Phase 2 — Assets</h3>
+    {% if app.verdict and app.verdict != 'SKIP' %}
+      <form method="post" action="/applications/{{ app.id }}/generate">
+        <button class="btn primary" type="submit">
+          {% if app.resume_md %}Regenerate{% else %}Generate{% endif %} assets
+        </button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if app.verdict == 'SKIP' %}
+    <p class="muted">Verdict is SKIP — no assets generated.</p>
+  {% elif app.resume_md %}
+    <div class="grid two">
+      <div>
+        <div class="asset-head">
+          <h4>Tailored resume</h4>
+          <a class="btn small" href="/applications/{{ app.id }}/download/resume">⬇ .md</a>
+        </div>
+        <pre class="asset">{{ app.resume_md }}</pre>
+      </div>
+      <div>
+        <div class="asset-head">
+          <h4>Cover letter</h4>
+          <a class="btn small" href="/applications/{{ app.id }}/download/cover">⬇ .md</a>
+        </div>
+        <pre class="asset">{{ app.cover_letter_md }}</pre>
+        <p class="muted small">AC21 used in letter: {{ 'yes' if app.ac21_used_in_letter else 'no' }}</p>
+      </div>
+    </div>
+    <div class="asset-head">
+      <h4>LinkedIn outreach</h4>
+      <a class="btn small" href="/applications/{{ app.id }}/download/outreach">⬇ .md</a>
+    </div>
+    <pre class="asset">{{ app.outreach_md }}</pre>
+  {% else %}
+    <p class="muted">Click "Generate assets" to produce the tailored resume, cover letter, and outreach.</p>
+  {% endif %}
+</section>
+
+{# Phase 3 #}
+<section class="card">
+  <h3>Phase 3 — Pre-submission checklist</h3>
+  <ul class="checklist">
+    <li>Convert resume .md → docx. Single column, no tables, Calibri/Arial 11pt.</li>
+    <li>ATS keyword check (Jobscan or similar). Target 75%+ match. <em>Skip if you don't want JD/resume sent to a third party.</em></li>
+    <li>App form: "Authorized to work in the US?" → <strong>Yes</strong>.</li>
+    <li>App form: "Require sponsorship now or in the future?" → <strong>Yes</strong> (H1B transfer is still sponsorship). Clarify AC21/transfer in cover letter if applicable.</li>
+    <li>Prefer company career site over LinkedIn Easy Apply.</li>
+    <li>Send LinkedIn outreach 24h <em>after</em> submission, not before.</li>
+  </ul>
+</section>
+
+{# Phase 4 — Tracker / Status #}
+<section class="card">
+  <h3>Phase 4 — Status & tracker</h3>
+  <form method="post" action="/applications/{{ app.id }}/status" class="grid">
+    <label>Status
+      <select name="status">
+        {% for s in ['New','Screened','Skipped','Assets generated — pending user submission','Submitted','Interviewing','Offer','Rejected','Withdrawn'] %}
+          <option value="{{ s }}" {% if app.status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="wide">Notes
+      <textarea name="notes" rows="3">{{ app.notes or '' }}</textarea>
+    </label>
+    <div class="wide">
+      <button class="btn" type="submit">Save status</button>
+      <a class="btn small" href="/applications/{{ app.id }}/tracker.json" target="_blank">View tracker JSON</a>
+    </div>
+  </form>
+
+  <details class="danger">
+    <summary>Delete this application</summary>
+    <form method="post" action="/applications/{{ app.id }}/delete" onsubmit="return confirm('Delete this application?')">
+      <button class="btn danger" type="submit">Delete permanently</button>
+    </form>
+  </details>
+</section>
+
+{% endblock %}
