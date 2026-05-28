@@ -45,11 +45,30 @@ CREATE TABLE IF NOT EXISTS applications (
 );
 """
 
+# Columns added after v1. Idempotent ALTER TABLE migration handles existing DBs.
+_MIGRATIONS = [
+    ("profile", "default_provider", "TEXT DEFAULT 'ollama'"),
+    ("profile", "anthropic_api_key", "TEXT"),
+    ("profile", "anthropic_model", "TEXT DEFAULT 'claude-opus-4-7'"),
+    ("profile", "openai_api_key", "TEXT"),
+    ("profile", "openai_model", "TEXT DEFAULT 'gpt-4o'"),
+    ("applications", "llm_provider", "TEXT"),
+    ("applications", "llm_model", "TEXT"),
+]
+
+
+def _ensure_column(conn, table, col, decl):
+    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if col not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
 
 def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.executescript(SCHEMA)
+        for table, col, decl in _MIGRATIONS:
+            _ensure_column(conn, table, col, decl)
         cur = conn.execute("SELECT COUNT(*) FROM profile WHERE id = 1")
         if cur.fetchone()[0] == 0:
             conn.execute("INSERT INTO profile (id) VALUES (1)")

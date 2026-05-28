@@ -53,21 +53,58 @@
     </label>
 
     <fieldset class="wide">
-      <legend>Local LLM (Ollama)</legend>
+      <legend>LLM providers</legend>
+      <p class="muted small">
+        Local Ollama is the privacy-safe default. Cloud providers (Claude, OpenAI)
+        send the JD + master resume to a third-party API. You can switch per-application
+        from the New Application page.
+      </p>
+
+      <label>Default provider
+        <select name="default_provider">
+          {% for v, l in [('ollama','Local Ollama (private)'),('anthropic','Anthropic Claude (cloud)'),('openai','OpenAI (cloud)')] %}
+            <option value="{{ v }}" {% if (profile.default_provider or 'ollama') == v %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div></div>
+
       <label>Ollama URL
         <input name="ollama_url" value="{{ profile.ollama_url or 'http://localhost:11434' }}" />
       </label>
-      <label>Model
+      <label>Ollama model
         <input name="ollama_model" value="{{ profile.ollama_model or 'llama3.1:8b' }}" list="model-list" />
         <datalist id="model-list">
           {% for m in ollama_models %}<option value="{{ m }}"></option>{% endfor %}
         </datalist>
       </label>
       {% if ollama_models %}
-        <p class="muted small">Detected locally: {{ ollama_models | join(', ') }}</p>
+        <p class="muted small wide">Detected locally: {{ ollama_models | join(', ') }}</p>
       {% else %}
-        <p class="muted small">No models detected. Make sure Ollama is running and you've pulled a JSON-capable model (e.g. <code>ollama pull llama3.1:8b</code>).</p>
+        <p class="muted small wide">No models detected. Make sure Ollama is running and you've pulled a JSON-capable model (e.g. <code>ollama pull llama3.1:8b</code>).</p>
       {% endif %}
+
+      <label>Anthropic API key <span class="muted small">(for Claude)</span>
+        <input name="anthropic_api_key" type="password" value="{{ profile.anthropic_api_key or '' }}" placeholder="sk-ant-..." />
+      </label>
+      <label>Claude model
+        <select name="anthropic_model">
+          {% for m in ['claude-opus-4-7','claude-sonnet-4-6','claude-haiku-4-5-20251001'] %}
+            <option value="{{ m }}" {% if (profile.anthropic_model or 'claude-opus-4-7') == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>OpenAI API key <span class="muted small">(for GPT)</span>
+        <input name="openai_api_key" type="password" value="{{ profile.openai_api_key or '' }}" placeholder="sk-..." />
+      </label>
+      <label>OpenAI model
+        <select name="openai_model">
+          {% for m in ['gpt-4o','gpt-4o-mini','gpt-4-turbo'] %}
+            <option value="{{ m }}" {% if (profile.openai_model or 'gpt-4o') == m %}selected{% endif %}>{{ m }}</option>
+          {% endfor %}
+        </select>
+      </label>
     </fieldset>
 
     <fieldset class="wide">

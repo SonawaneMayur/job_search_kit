@@ -6,45 +6,121 @@
   <h2>Search jobs</h2>
   <p class="muted small">
     Uses the Adzuna public jobs API. Add your free Adzuna app_id and app_key in
-    <a href="/profile">Profile</a> first. LinkedIn / Indeed direct scraping is not
-    supported (blocked by ToS / anti-bot) — use the URL fetcher on the New application
-    page to import a single posting.
+    <a href="/profile">Profile</a> first.
   </p>
 
   {% if not profile.adzuna_app_id or not profile.adzuna_app_key %}
     <p class="muted">Adzuna credentials missing. <a href="/profile">Set them in Profile</a>.</p>
   {% else %}
-    <form method="post" action="/search" class="search-form">
-      <input class="search-input" name="what" placeholder="e.g. Staff Data Engineer, Principal AI Engineer, Databricks Solutions Architect"
-             value="{{ query or '' }}" required />
-      <select class="search-select" name="where">
-        {% for code, label in [('us','US'),('gb','UK'),('ca','Canada'),('in','India'),('au','Australia'),('de','Germany')] %}
-          <option value="{{ code }}" {% if where == code %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      <button class="btn primary search-btn" type="submit">Search</button>
+    <form method="post" action="/search" class="search-grid">
+      <label class="wide">Keywords / role
+        <input class="search-input" name="what"
+               placeholder="e.g. Staff Data Engineer, Principal AI Engineer, Databricks Solutions Architect"
+               value="{{ form.what or '' }}" required />
+      </label>
+
+      <label>Location (city, state, ZIP)
+        <input name="where" placeholder="e.g. Boston, MA  or  02115  or leave blank" value="{{ form.where or '' }}" />
+      </label>
+
+      <label>Within (km)
+        <input name="distance" type="number" min="0" max="500" placeholder="50" value="{{ form.distance or '' }}" />
+      </label>
+
+      <label>Country
+        <select name="country">
+          {% for code, label in [('us','US'),('gb','UK'),('ca','Canada'),('in','India'),('au','Australia'),('de','Germany')] %}
+            <option value="{{ code }}" {% if (form.country or 'us') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>Min salary (annual, local currency)
+        <input name="salary_min" type="number" min="0" placeholder="150000" value="{{ form.salary_min or '' }}" />
+      </label>
+
+      <label>Sort by
+        <select name="sort_by">
+          {% for v, l in [('salary','Salary (high → low)'),('relevance','Relevance'),('date','Most recent')] %}
+            <option value="{{ v }}" {% if (form.sort_by or 'salary') == v %}selected{% endif %}>{{ l }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" name="remote_only" value="1" {% if form.remote_only %}checked{% endif %} />
+        Remote only <span class="muted small">(keyword + text scan)</span>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" name="h1b_only" value="1" {% if form.h1b_only %}checked{% endif %} />
+        H1B-friendly employers only <span class="muted small">(curated list — not exhaustive)</span>
+      </label>
+
+      <div class="wide search-actions">
+        <button class="btn primary search-btn" type="submit">Search</button>
+      </div>
     </form>
+
+    <details>
+      <summary>About the filter limitations</summary>
+      <ul class="muted small">
+        <li><strong>Remote:</strong> Adzuna has no native remote flag. We append "remote" to your keywords and then post-filter results whose title/description/location mentions remote / WFH / telecommute / distributed. Some hybrid roles will slip through.</li>
+        <li><strong>H1B-friendly:</strong> No public API tells us who sponsors. We match against a curated list of ~200 top historical LCA filers (FY23/24 DOL data). Many startups and mid-size firms sponsor without being on the list. The <em>"↗ visa history"</em> link next to every employer takes you to <code>myvisajobs.com</code> for that exact company.</li>
+        <li><strong>Employer size:</strong> Not available from Adzuna. Each result has a <em>"↗ LinkedIn"</em> link so you can check headcount yourself.</li>
+        <li><strong>Salary:</strong> Adzuna shows ranges where employers publish them; "(est)" means Adzuna's model predicted the band from comparable roles.</li>
+      </ul>
+    </details>
   {% endif %}
 
   {% if results %}
     {% if not results.ok %}
       <p class="error">{{ results.error }}</p>
     {% else %}
-      <p class="muted small">{{ results.results | length }} of {{ results.count }} results</p>
+      <p class="muted small">
+        Showing {{ results.shown }} result{{ '' if results.shown == 1 else 's' }}
+        {% if results.applied_filters.remote_only or results.applied_filters.h1b_only %}
+          (after filtering {{ results.raw_count }} from Adzuna)
+        {% else %}
+          of {{ results.count }} total
+        {% endif %}
+      </p>
       <ul class="results">
         {% for r in results.results %}
-          <li>
-            <div class="row between">
-              <div>
+          <li class="result-card">
+            <div class="result-head">
+              <div class="result-title">
                 <strong>{{ r.title }}</strong>
-                <span class="muted">— {{ r.company }} · {{ r.location }}</span>
+                <div class="muted small">
+                  {{ r.company or 'Unknown company' }}{% if r.location %} · {{ r.location }}{% endif %}
+                </div>
               </div>
-              <div>
+              <div class="result-actions">
                 <a class="btn small" href="{{ r.url }}" target="_blank" rel="noopener">View ↗</a>
                 <a class="btn small primary" href="/applications/new?url={{ r.url | urlencode }}">Import →</a>
               </div>
             </div>
-            <p class="muted small">{{ r.description }}</p>
+
+            <div class="result-meta">
+              {% if r.salary %}<span class="meta-pill salary">💰 {{ r.salary }}</span>{% endif %}
+              {% if r.is_remote %}<span class="meta-pill remote">🌐 Remote</span>{% endif %}
+              {% if r.h1b_likely %}<span class="meta-pill h1b">✓ Known H1B sponsor</span>{% endif %}
+              {% if r.contract_time %}<span class="meta-pill">{{ r.contract_time | replace('_', ' ') }}</span>{% endif %}
+              {% if r.contract_type %}<span class="meta-pill">{{ r.contract_type }}</span>{% endif %}
+              {% if r.created %}<span class="meta-pill date">{{ r.created[:10] }}</span>{% endif %}
+            </div>
+
+            {% if r.description %}
+              <p class="muted small result-desc">{{ r.description }}</p>
+            {% endif %}
+
+            <div class="result-links muted small">
+              {% if r.company %}
+                <a href="https://www.myvisajobs.com/Search_Visa_Sponsor.aspx?T={{ r.company | urlencode }}" target="_blank" rel="noopener">↗ Visa history</a>
+                ·
+                <a href="https://www.linkedin.com/search/results/companies/?keywords={{ r.company | urlencode }}" target="_blank" rel="noopener">↗ LinkedIn (size)</a>
+              {% endif %}
+            </div>
           </li>
         {% endfor %}
       </ul>

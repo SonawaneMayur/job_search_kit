@@ -53,6 +53,24 @@ unless you explicitly enable the optional Adzuna job-search integration.
 
 Available per-application at `/applications/{id}/tracker.json`.
 
+## Search page filters
+
+The Search page hits Adzuna's public jobs API. Available filters:
+
+| Filter | How it works |
+|---|---|
+| Keywords | Adzuna `what` parameter |
+| Location | Adzuna `where` (city/state/ZIP within the selected country) |
+| Distance | Adzuna `distance` (km) |
+| Country | URL path segment — US, UK, Canada, India, AU, DE |
+| Min salary | Adzuna `salary_min` (annual, local currency) |
+| Sort by | Relevance / Most recent / Salary high→low |
+| **Remote only** | Adzuna has no native remote flag. We append "remote" to keywords AND post-filter results whose title/description/location matches `remote\|WFH\|telecommute\|distributed`. Hybrid roles can slip through. |
+| **H1B-friendly** | No API exists for sponsorship status. We match company names against a curated list of ~200 top historical LCA filers ([app/data/h1b_sponsors.py](app/data/h1b_sponsors.py) — sourced from public DOL data). Many startups and mid-size firms sponsor but aren't on the list. Every result includes a `↗ Visa history` link to `myvisajobs.com` for that exact company so you can verify. |
+| **Employer size** | Not available from Adzuna. Each result has a `↗ LinkedIn` link — check headcount there. |
+
+Results show salary range (with `(est)` when Adzuna predicted it), contract type, posting date, plus badges for Remote and Known H1B sponsor.
+
 ## Capturing JDs from any site
 
 Three layered options, in order of robustness:

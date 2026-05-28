@@ -33,7 +33,7 @@
   <div id="fetch-result"></div>
 
   <h3>2. Submit JD for screening</h3>
-  <form method="post" action="/applications" class="grid">
+  <form method="post" action="/applications" class="grid" id="screen-form">
     <label>Company
       <input name="company" placeholder="auto-detected if blank" value="{{ prefill_company or '' }}" />
     </label>
@@ -46,11 +46,58 @@
     <label class="wide">JD text *
       <textarea name="jd_text" rows="20" required>{{ prefill_jd or '' }}</textarea>
     </label>
+
+    <fieldset class="wide provider-fieldset">
+      <legend>AI provider</legend>
+      <p class="muted small" style="margin: 0 0 10px;">
+        Default is local Ollama (private). Switching to Claude or OpenAI sends
+        the JD + your master resume to that provider's API. Configure API keys in
+        <a href="/profile">Profile</a>.
+      </p>
+      <div class="provider-options">
+        {% for opt in provider_options %}
+          <label class="provider-option {% if not opt.available %}disabled{% endif %}">
+            <input type="radio" name="provider" value="{{ opt.id }}"
+                   {% if opt.id == default_provider and opt.available %}checked{% endif %}
+                   {% if not opt.available %}disabled{% endif %}
+                   data-cloud="{{ '0' if opt.id == 'ollama' else '1' }}" />
+            <span>
+              <strong>{{ opt.label }}</strong>
+              <span class="muted small">— {{ opt.note }}</span>
+              {% if not opt.available %}
+                <span class="muted small">  ⚠ no API key set</span>
+              {% endif %}
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+      <div id="cloud-warning" class="cloud-warning hidden">
+        ⚠ You picked a cloud provider. Your master resume and the JD will be sent to that provider's API.
+      </div>
+    </fieldset>
+
     <div class="wide">
       <button type="submit" class="btn primary">Screen this JD</button>
-      <span class="muted small">— calls your local Ollama. May take 30–120s depending on model.</span>
+      <span class="muted small">— may take 30–120s on local Ollama, 5–30s on a cloud provider.</span>
     </div>
   </form>
+
+  <script>
+    (function() {
+      const form = document.getElementById('screen-form');
+      if (!form) return;
+      const warning = document.getElementById('cloud-warning');
+      form.querySelectorAll('input[name="provider"]').forEach(el => {
+        el.addEventListener('change', () => {
+          const isCloud = el.checked && el.dataset.cloud === '1';
+          warning.classList.toggle('hidden', !isCloud);
+        });
+      });
+      // initial state
+      const checked = form.querySelector('input[name="provider"]:checked');
+      if (checked) checked.dispatchEvent(new Event('change'));
+    })();
+  </script>
 </section>
 
 {% endblock %}

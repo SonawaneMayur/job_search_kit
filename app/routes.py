@@ -71,6 +71,11 @@ def profile_post(
     master_resume: str = Form(""),
     ollama_url: str = Form("http://localhost:11434"),
     ollama_model: str = Form("llama3.1:8b"),
+    default_provider: str = Form("ollama"),
+    anthropic_api_key: str = Form(""),
+    anthropic_model: str = Form("claude-opus-4-7"),
+    openai_api_key: str = Form(""),
+    openai_model: str = Form("gpt-4o"),
     adzuna_app_id: str = Form(""),
     adzuna_app_key: str = Form(""),
 ):
@@ -85,6 +90,11 @@ def profile_post(
         "master_resume": master_resume,
         "ollama_url": ollama_url,
         "ollama_model": ollama_model,
+        "default_provider": default_provider,
+        "anthropic_api_key": anthropic_api_key,
+        "anthropic_model": anthropic_model,
+        "openai_api_key": openai_api_key,
+        "openai_model": openai_model,
         "adzuna_app_id": adzuna_app_id,
         "adzuna_app_key": adzuna_app_key,
     })
@@ -101,6 +111,7 @@ def new_app_get(
     company: str = "",
     role: str = "",
 ):
+    profile = db.fetch_profile()
     return templates.TemplateResponse(
         "application_new.html",
         _ctx(
@@ -109,6 +120,8 @@ def new_app_get(
             prefill_jd=jd,
             prefill_company=company,
             prefill_role=role,
+            provider_options=llm.provider_options(profile),
+            default_provider=profile.get("default_provider") or "ollama",
         ),
     )
 
@@ -140,6 +153,7 @@ def import_jd(
 ):
     """Receives a POST from the bookmarklet running in the user's logged-in browser.
     Renders the New Application form pre-filled so the user can review and screen."""
+    profile = db.fetch_profile()
     return templates.TemplateResponse(
         "application_new.html",
         _ctx(
@@ -149,6 +163,8 @@ def import_jd(
             prefill_company="",
             prefill_role=title,
             imported=True,
+            provider_options=llm.provider_options(profile),
+            default_provider=profile.get("default_provider") or "ollama",
         ),
     )
 
@@ -202,13 +218,16 @@ def create_application(
     role: str = Form(""),
     jd_url: str = Form(""),
     jd_text: str = Form(...),
+    provider: str = Form("ollama"),
+    provider_model: str = Form(""),
 ):
     profile = db.fetch_profile()
     if not (profile.get("master_resume") or "").strip():
         raise HTTPException(400, "Master resume is empty. Fill in your profile first.")
 
+    model = provider_model.strip() or None
     try:
-        screening = llm.screen_jd(profile, jd_text)
+        screening = llm.screen_jd(profile, jd_text, provider=provider, model=model)
     except llm.LLMError as e:
         return templates.TemplateResponse(
             "partials/error.html",
@@ -234,6 +253,8 @@ def create_application(
         "status": "Screened" if verdict != "SKIP" else "Skipped",
         "date_generated": date.today().isoformat(),
         "follow_up_date": (date.today() + timedelta(days=7)).isoformat(),
+        "llm_provider": provider,
+        "llm_model": model or "",
     }
     app_id = db.create_application(fields)
     return RedirectResponse(f"/applications/{app_id}", status_code=303)
@@ -253,21 +274,45 @@ def app_detail(request: Request, app_id: int):
         except json.JSONDecodeError:
             screening = {}
     tracker = _build_tracker(app_row)
+    profile = db.fetch_profile()
     return templates.TemplateResponse(
         "application_detail.html",
-        _ctx(request, app=app_row, screening=screening, tracker=tracker),
+        _ctx(
+            request,
+            app=app_row,
+            screening=screening,
+            tracker=tracker,
+            provider_options=llm.provider_options(profile),
+        ),
     )
 
 
 @router.post("/applications/{app_id}/generate", response_class=HTMLResponse)
-def generate(request: Request, app_id: int):
+def generate(
+    request: Request,
+    app_id: int,
+    provider: str = Form(""),
+    provider_model: str = Form(""),
+):
     app_row = db.get_application(app_id)
     if not app_row:
         raise HTTPException(404)
     profile = db.fetch_profile()
     screening = json.loads(app_row.get("screening_json") or "{}")
+    # Use the form-selected provider if given, else fall back to whatever was used
+    # for screening, else the profile default.
+    used_provider = (
+        provider
+        or app_row.get("llm_provider")
+        or profile.get("default_provider")
+        or "ollama"
+    )
+    used_model = provider_model.strip() or app_row.get("llm_model") or None
     try:
-        assets = llm.generate_assets(profile, app_row["jd_text"], screening)
+        assets = llm.generate_assets(
+            profile, app_row["jd_text"], screening,
+            provider=used_provider, model=used_model,
+        )
     except llm.LLMError as e:
         return templates.TemplateResponse(
             "partials/error.html",
@@ -280,6 +325,8 @@ def generate(request: Request, app_id: int):
         "outreach_md": _join_outreach(assets),
         "ac21_used_in_letter": 1 if assets.get("ac21_used_in_letter") else 0,
         "status": "Assets generated — pending user submission",
+        "llm_provider": used_provider,
+        "llm_model": used_model or "",
     })
     return RedirectResponse(f"/applications/{app_id}", status_code=303)
 
@@ -357,23 +404,54 @@ def _build_tracker(app_row: dict) -> dict:
 
 @router.get("/search", response_class=HTMLResponse)
 def search_get(request: Request):
-    return templates.TemplateResponse("search.html", _ctx(request, results=None))
+    return templates.TemplateResponse("search.html", _ctx(request, results=None, form={}))
 
 
 @router.post("/search", response_class=HTMLResponse)
 def search_post(
     request: Request,
     what: str = Form(...),
-    where: str = Form("us"),
+    country: str = Form("us"),
+    where: str = Form(""),
+    distance: str = Form(""),
+    salary_min: str = Form(""),
+    sort_by: str = Form("salary"),
+    remote_only: str = Form(""),
+    h1b_only: str = Form(""),
 ):
     profile = db.fetch_profile()
+    try:
+        distance_km = int(distance) if distance.strip() else None
+    except ValueError:
+        distance_km = None
+    try:
+        salary_min_val = int(salary_min) if salary_min.strip() else None
+    except ValueError:
+        salary_min_val = None
+
+    form = {
+        "what": what,
+        "country": country,
+        "where": where,
+        "distance": distance,
+        "salary_min": salary_min,
+        "sort_by": sort_by,
+        "remote_only": bool(remote_only),
+        "h1b_only": bool(h1b_only),
+    }
     result = jd_fetch.adzuna_search(
         profile.get("adzuna_app_id", ""),
         profile.get("adzuna_app_key", ""),
         what=what,
+        country=country,
         where=where,
+        distance_km=distance_km,
+        salary_min=salary_min_val,
+        sort_by=sort_by,
+        remote_only=bool(remote_only),
+        h1b_only=bool(h1b_only),
     )
     return templates.TemplateResponse(
         "search.html",
-        _ctx(request, results=result, query=what, where=where),
+        _ctx(request, results=result, form=form),
     )

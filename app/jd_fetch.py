@@ -238,19 +238,61 @@ def fetch_jd_with_browser(url: str) -> dict:
     return {"ok": True, "title": title or "", "text": cleaned}
 
 
-# ---------- Adzuna (unchanged) ----------
+# ---------- Adzuna ----------
 
-def adzuna_search(app_id: str, app_key: str, what: str, where: str = "us", page: int = 1) -> dict:
+REMOTE_RE = re.compile(r"\b(remote|fully\s*remote|work\s*from\s*home|wfh|telecommute|distributed)\b", re.I)
+
+CURRENCY_BY_COUNTRY = {
+    "us": "$", "gb": "£", "ca": "C$", "au": "A$",
+    "de": "€", "fr": "€", "nl": "€", "in": "₹",
+}
+
+
+def adzuna_search(
+    app_id: str,
+    app_key: str,
+    what: str,
+    country: str = "us",
+    where: str = "",
+    distance_km: int | None = None,
+    salary_min: int | None = None,
+    sort_by: str = "relevance",
+    remote_only: bool = False,
+    h1b_only: bool = False,
+    page: int = 1,
+) -> dict:
+    """Adzuna jobs search.
+    country: 2-letter country path segment (us, gb, ca, ...).
+    where:   free-form location WITHIN the country (e.g. 'Boston', '02115', 'Texas').
+    remote_only: appends 'remote' to `what`, then post-filters results for remote keywords.
+    h1b_only: post-filters to known-sponsor companies (curated list — not exhaustive).
+    """
+    from .data.h1b_sponsors import is_h1b_sponsor
+
     if not app_id or not app_key:
         return {"ok": False, "error": "Adzuna credentials missing. Add them in Settings."}
-    url = f"https://api.adzuna.com/v1/api/jobs/{where}/search/{page}"
+
+    keyword_query = (what or "").strip()
+    if remote_only and "remote" not in keyword_query.lower():
+        keyword_query = (keyword_query + " remote").strip()
+
+    url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
     params = {
         "app_id": app_id,
         "app_key": app_key,
-        "what": what,
-        "results_per_page": 20,
+        "what": keyword_query,
+        "results_per_page": 50,
         "content-type": "application/json",
     }
+    if where:
+        params["where"] = where
+    if distance_km:
+        params["distance"] = distance_km
+    if salary_min:
+        params["salary_min"] = salary_min
+    if sort_by in ("date", "salary", "relevance"):
+        params["sort_by"] = sort_by
+
     try:
         with httpx.Client(timeout=30.0) as client:
             r = client.get(url, params=params)
@@ -259,14 +301,86 @@ def adzuna_search(app_id: str, app_key: str, what: str, where: str = "us", page:
     except httpx.HTTPError as e:
         return {"ok": False, "error": f"Adzuna error: {e}"}
 
+    currency = CURRENCY_BY_COUNTRY.get(country.lower(), "")
+    raw_results = data.get("results", [])
     results = []
-    for item in data.get("results", []):
+    for item in raw_results:
+        company = (item.get("company") or {}).get("display_name", "")
+        location = (item.get("location") or {}).get("display_name", "")
+        title = item.get("title", "")
+        desc = item.get("description", "")
+        text_pool = f"{title}\n{location}\n{desc}"
+        is_remote = bool(REMOTE_RE.search(text_pool))
+
+        smin = item.get("salary_min")
+        smax = item.get("salary_max")
+        predicted = bool(item.get("salary_is_predicted") == "1" or item.get("salary_is_predicted") is True)
+        salary_str = _format_salary(smin, smax, currency, predicted)
+
+        h1b_match = is_h1b_sponsor(company)
+
+        if remote_only and not is_remote:
+            continue
+        if h1b_only and not h1b_match:
+            continue
+
         results.append({
-            "title": item.get("title", ""),
-            "company": (item.get("company") or {}).get("display_name", ""),
-            "location": (item.get("location") or {}).get("display_name", ""),
+            "title": title,
+            "company": company,
+            "location": location,
             "url": item.get("redirect_url", ""),
-            "description": item.get("description", ""),
+            "description": desc,
             "created": item.get("created", ""),
+            "salary": salary_str,
+            "salary_min": smin,
+            "salary_max": smax,
+            "salary_predicted": predicted,
+            "is_remote": is_remote,
+            "h1b_likely": h1b_match,
+            "contract_type": item.get("contract_type", ""),
+            "contract_time": item.get("contract_time", ""),
         })
-    return {"ok": True, "results": results, "count": data.get("count", 0)}
+    if sort_by == "salary":
+        # Defense-in-depth: even though Adzuna sorts desc, enforce locally so
+        # missing-salary rows fall to the bottom and we always show big numbers first.
+        def _key(r):
+            s = r.get("salary_max") or r.get("salary_min") or 0
+            try:
+                return -float(s)
+            except (TypeError, ValueError):
+                return 0
+        results.sort(key=_key)
+
+    return {
+        "ok": True,
+        "results": results,
+        "count": data.get("count", 0),
+        "shown": len(results),
+        "raw_count": len(raw_results),
+        "applied_filters": {
+            "remote_only": remote_only,
+            "h1b_only": h1b_only,
+            "salary_min": salary_min,
+            "sort_by": sort_by,
+        },
+    }
+
+
+def _format_salary(smin, smax, currency: str, predicted: bool) -> str:
+    if not smin and not smax:
+        return ""
+    def fmt(n):
+        try:
+            n = int(round(float(n)))
+            if n >= 1000:
+                return f"{currency}{n // 1000}k"
+            return f"{currency}{n}"
+        except (ValueError, TypeError):
+            return ""
+    if smin and smax and smin != smax:
+        s = f"{fmt(smin)} – {fmt(smax)}"
+    else:
+        s = fmt(smin or smax)
+    if predicted:
+        s += " (est)"
+    return s

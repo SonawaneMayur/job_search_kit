@@ -71,13 +71,28 @@
   <div class="card-head">
     <h3>Phase 2 — Assets</h3>
     {% if app.verdict and app.verdict != 'SKIP' %}
-      <form method="post" action="/applications/{{ app.id }}/generate">
+      <form method="post" action="/applications/{{ app.id }}/generate" class="inline-form">
+        <select name="provider" class="provider-mini">
+          {% for opt in provider_options %}
+            <option value="{{ opt.id }}"
+              {% if app.llm_provider and opt.id == app.llm_provider %}selected
+              {% elif not app.llm_provider and opt.id == 'ollama' %}selected{% endif %}
+              {% if not opt.available %}disabled{% endif %}>
+              {{ opt.label }}{% if not opt.available %} (no API key){% endif %}
+            </option>
+          {% endfor %}
+        </select>
         <button class="btn primary" type="submit">
           {% if app.resume_md %}Regenerate{% else %}Generate{% endif %} assets
         </button>
       </form>
     {% endif %}
   </div>
+  {% if app.llm_provider %}
+    <p class="muted small">
+      Last run with <strong>{{ app.llm_provider }}</strong>{% if app.llm_model %} ({{ app.llm_model }}){% endif %}.
+    </p>
+  {% endif %}
 
   {% if app.verdict == 'SKIP' %}
     <p class="muted">Verdict is SKIP — no assets generated.</p>
